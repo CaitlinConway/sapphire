@@ -29,10 +29,10 @@ export default function MapView({ rows, selectedId, onSelect, showHeat, showPins
   useEffect(() => {
     if (!el.current || map.current) return;
     const m = L.map(el.current, { worldCopyJump: true, zoomControl: true }).setView([30, -20], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    // OpenStreetMap's standard tiles: no API key, fine for light personal use.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      subdomains: 'abcd',
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(m);
     pins.current = L.layerGroup().addTo(m);
     map.current = m;
