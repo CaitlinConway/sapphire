@@ -43,13 +43,13 @@ jobs:
         env:
           MAX_CALLS: ${{ github.event.inputs.max_calls || '8000' }}
           PROBE: ${{ github.event.inputs.probe == 'true' && '1' || '' }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       - name: Commit data
-        if: github.event.inputs.probe != 'true'
+        # Always commit, so prices fetched before a failure are kept.
+        if: always() && github.event.inputs.probe != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/data data/tripadvisor_keys.json data/rapidapi_usage.json 2>/dev/null || git add public/data data/tripadvisor_keys.json
+          git add public/data data/*.json
           git diff --cached --quiet || git commit -m "Refresh hotel and price data"
           git push
 

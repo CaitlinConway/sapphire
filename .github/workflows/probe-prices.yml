@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/fetch_prices.mjs'
+      - 'data/tripadvisor_overrides.json'
       - '.github/workflows/probe-prices.yml'
 
 jobs:
@@ -15,7 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Search and price one hotel
+      - name: Price one hotel with Xotelo
         run: PROBE=1 MAX_CALLS=10 node scripts/fetch_prices.mjs
-        env:
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      - name: Price the first 3 hotels (quick pass sample)
+        run: |
+          node -e 'const f="data/tripadvisor_overrides.json",j=require("./"+f);j.overrides=Object.fromEntries(Object.entries(j.overrides).slice(0,3));require("fs").writeFileSync(f,JSON.stringify(j))'
+          MAX_CALLS=20 QUICK_DATES=2 DELAY_MS=300 node scripts/fetch_prices.mjs
