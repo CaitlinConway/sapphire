@@ -5,7 +5,7 @@
 //   data/tripadvisor_keys.json   hotel id -> { key, checked, manual }
 //   public/data/prices.json      { updated, checkins[], totals: {id: {checkin: usd2Nights}}, heat: {id: {cheap[], high[]}}, keys }
 // Env: MAX_CALLS (default 8000), DELAY_MS (default 700), WEEKS (default 12), NIGHTS (default 2),
-//      QUICK_DATES (default 4), PROBE=1 (price one hotel, print the raw responses and exit)
+//      QUICK_DATES (default 4), CONCURRENCY (default 4), PROBE=1 (price one hotel, print the raw responses and exit)
 // Chase Travel's own prepaid rate is usually a bit different: these are estimates.
 import fs from 'node:fs';
 
@@ -15,6 +15,8 @@ const DELAY_MS = +(process.env.DELAY_MS ?? 700);
 const WEEKS = +(process.env.WEEKS ?? 12);
 const NIGHTS = +(process.env.NIGHTS ?? 2);
 const QUICK_DATES = +(process.env.QUICK_DATES ?? 4);
+// Xotelo answers in ~2s, so price several hotels at once.
+const CONCURRENCY = +(process.env.CONCURRENCY ?? 4);
 const KEYS_FILE = 'data/tripadvisor_keys.json';
 const OVERRIDES_FILE = 'data/tripadvisor_overrides.json';
 const PRICES_FILE = 'public/data/prices.json';
@@ -116,6 +118,19 @@ async function fetchHotel(h, dates) {
   if (calls - saved >= 200) { save(); saved = calls; }
 }
 
+// Run fn over items with up to CONCURRENCY in flight; a budget stop ends the whole pool.
+async function pool(items, fn) {
+  let i = 0, stop = null;
+  const worker = async () => {
+    while (!stop && i < items.length) {
+      const item = items[i++];
+      try { await fn(item); } catch (e) { stop = e; }
+    }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  if (stop) throw stop;
+}
+
 try {
   // Breadth first: hotels with no prices yet get a quick pass (heatmap + the next QUICK_DATES
   // check-ins) so the map fills fast; then the stalest hotels get every date.
@@ -123,16 +138,16 @@ try {
   console.log(`${withKey.length}/${hotels.length} hotels have a TripAdvisor key.`);
   const fresh = withKey.filter((h) => !prices.fetched[h.id]);
   console.log(`Quick pass: ${fresh.length} new hotels × ${QUICK_DATES} dates…`);
-  for (const h of fresh) {
+  await pool(fresh, async (h) => {
     await fetchHotel(h, checkins.slice(0, QUICK_DATES));
     prices.fetched[h.id] = '0000-quick';
-  }
+  });
   const queue = withKey.sort((a, b) => (prices.fetched[a.id] ?? '').localeCompare(prices.fetched[b.id] ?? ''));
   console.log(`Full pass: up to ${queue.length} hotels × ${checkins.length} dates…`);
-  for (const h of queue) {
+  await pool(queue, async (h) => {
     await fetchHotel(h, checkins);
     prices.fetched[h.id] = today;
-  }
+  });
 } catch (e) {
   if (e.message !== 'budget') throw e;
   console.log(`Stopped at call budget (${MAX_CALLS}); the next run continues from here.`);
