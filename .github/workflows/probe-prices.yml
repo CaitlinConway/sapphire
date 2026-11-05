@@ -1,0 +1,19 @@
+name: Probe price API
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/fetch_prices.mjs'
+      - '.github/workflows/probe-prices.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Search and price one hotel
+        run: PROBE=1 MAX_CALLS=10 node scripts/fetch_prices.mjs
