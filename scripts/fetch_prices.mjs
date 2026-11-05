@@ -136,8 +136,15 @@ function save() {
 
 if (process.env.PROBE) {
   const h = hotels.find((x) => /Kimpton Gray/.test(x.name)) ?? hotels[0];
-  const s = await api('search', { query: h.name });
-  console.log('search', JSON.stringify(s)?.slice(0, 800));
+  // Query variants, to learn what the search endpoint accepts (4 searches max).
+  let s = null;
+  for (const q of ['Kimpton Gray Hotel', 'Kimpton Gray Chicago', 'Chicago']) {
+    const r = await api('search', { query: q });
+    console.log(`search "${q}"`, JSON.stringify(r)?.slice(0, 500));
+    s ??= r;
+  }
+  const g = await api('search', { query: 'Chicago', location_type: 'geo' });
+  console.log('search geo "Chicago"', JSON.stringify(g)?.slice(0, 500));
   const k = bestMatch(h, collectKeys(s));
   console.log('match', h.name, '->', k?.name, k?.hotel_key);
   if (k) {
@@ -174,12 +181,19 @@ try {
   if (RAPIDAPI_KEY) console.log(`RapidAPI searches used in ${month}: ${usage.searches}/${SEARCH_MONTHLY_LIMIT}`);
   if (!RAPIDAPI_KEY) console.log('No RAPIDAPI_KEY: skipping hotel matching; only hotels with known TripAdvisor keys get prices.');
   console.log(`Matching ${toMatch.length} hotels to TripAdvisor…`);
+  let consecutiveMisses = 0;
   for (const h of toMatch) {
     // One search per hotel to conserve the monthly quota.
     const before = calls;
-    const m = bestMatch(h, collectKeys(await api('search', { query: h.name })));
+    const res = await api('search', { query: h.name });
+    const m = bestMatch(h, collectKeys(res));
+    consecutiveMisses = res ? 0 : consecutiveMisses + 1;
     usage.searches += calls - before;
     fs.writeFileSync(USAGE_FILE, JSON.stringify(usage, null, 1));
+    if (consecutiveMisses >= 15) {
+      console.log('15 searches in a row returned nothing; stopping matching to save the monthly quota.');
+      break;
+    }
     keys[h.id] = { key: m?.hotel_key ?? null, checked: today };
     if (calls - saved >= 200) { save(); saved = calls; }
   }
