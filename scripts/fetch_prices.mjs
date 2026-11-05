@@ -214,8 +214,13 @@ if (process.env.PROBE) {
   // Endpoints that don't need a search: a known key from Xotelo's docs, and Chicago's location key.
   const r2 = await api('rates', { hotel_key: 'g297930-d305178', chk_in: checkins[2], chk_out: iso(addDays(new Date(checkins[2]), NIGHTS)) });
   console.log('rates(known key)', JSON.stringify(r2)?.slice(0, 600));
-  const l = await api('list', { location_key: 'g35805', limit: '5' });
-  console.log('list(Chicago)', JSON.stringify(l)?.slice(0, 600));
+  for (const params of [{ location_key: 'g35805' }, { location_key: 'g35805', offset: '0', limit: '30', sort: 'best_value' }, { location_key: '35805' }]) {
+    const l = await api('list', params);
+    console.log('list', JSON.stringify(params), JSON.stringify(l)?.slice(0, 400));
+  }
+  // Does /rates need the exact geo part of the key?
+  const r3 = await api('rates', { hotel_key: 'g1-d305178', chk_in: checkins[2], chk_out: iso(addDays(new Date(checkins[2]), NIGHTS)) });
+  console.log('rates(wrong geo)', JSON.stringify(r3)?.slice(0, 300));
   const hm = await api('heatmap', { hotel_key: 'g297930-d305178', chk_out: iso(addDays(new Date(checkins[2]), NIGHTS)) });
   console.log('heatmap(known key)', JSON.stringify(hm)?.slice(0, 400));
   console.log('failures', failureSamples);
