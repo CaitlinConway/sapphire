@@ -70,7 +70,7 @@ button, input, select { font: inherit; color: inherit; }
 .body { flex: 1; display: grid; grid-template-columns: minmax(340px, 440px) 1fr; min-height: 0; }
 .list { overflow: auto; border-right: 1px solid var(--line); background: var(--panel); }
 .stats {
-  position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 4px 14px;
+  display: flex; flex-wrap: wrap; gap: 4px 14px;
   padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px;
 }
 .stats b { color: var(--ink); }
@@ -146,4 +146,51 @@ footer { padding: 6px 16px; font-size: 11px; color: var(--muted); border-top: 1p
   .list { border-right: 0; }
   .maptools { left: 12px; right: 12px; top: auto; bottom: 64px; }
   .detail { bottom: 12px; top: 12px; }
+  /* Let the page scroll on phones so the list below the map is reachable. */
+  html, body, #root, .app { height: auto; }
+  .body { display: block; }
+  .mapwrap { height: 55vh; }
+  .list { overflow: visible; }
 }
+
+/* List view switch and city list */
+.listhead { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.viewbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 14px 0; background: var(--panel);
+}
+.tabs { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.tabs button { border: 0; background: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); font-weight: 600; font-size: 13px; }
+.tabs button.on { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / 0.1); }
+.viewbar select { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--panel); font-size: 12px; }
+.cities { padding-bottom: 12px; }
+.continent { border-bottom: 1px solid var(--line); }
+.continent > summary {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 10px 14px; cursor: pointer; list-style: none; background: var(--bg);
+}
+.continent > summary::-webkit-details-marker { display: none; }
+.continent > summary::before { content: '▸'; color: var(--muted); margin-right: 6px; }
+.continent[open] > summary::before { content: '▾'; }
+.cname { font-weight: 700; font-size: 15px; flex: 1; }
+.ccount { color: var(--muted); font-size: 12px; }
+.country h4 {
+  margin: 0; padding: 8px 14px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted);
+}
+.country h4 span { font-weight: 400; opacity: 0.8; }
+.country ul { list-style: none; margin: 0; padding: 0; }
+.cityrow {
+  width: 100%; display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: start; text-align: left;
+  padding: 7px 14px; border: 0; border-bottom: 1px solid var(--line); background: none; cursor: pointer;
+}
+.cityrow:hover, .city.open .cityrow { background: var(--accent-soft); }
+.caret { color: var(--muted); padding-top: 1px; }
+.cinfo { min-width: 0; }
+.ctitle { font-weight: 600; }
+.cstate { font-weight: 400; color: var(--muted); }
+.cinfo .badges { margin-top: 2px; }
+.cright { text-align: right; white-space: nowrap; font-size: 12px; }
+.chotels { display: block; color: var(--muted); }
+.cfrom { display: block; font-weight: 700; }
+.cityhotels { list-style: none; margin: 0; padding: 0 0 0 14px; background: var(--bg); }
+.cityhotels .row { background: var(--panel); }

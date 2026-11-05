@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import MapView from './MapView';
 import {
+  CitySort,
+  ContinentGroup,
   Filters,
   Hotel,
   HotelsFile,
@@ -10,9 +12,11 @@ import {
   Settings,
   addDays,
   applyFilters,
+  cityKeyOf,
   countryName,
   defaultCheckins,
   fmtDate,
+  groupByCity,
   priceColor,
   priceHotel,
   rank,
@@ -57,6 +61,9 @@ export default function App() {
   const [showPins, setShowPins] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [limit, setLimit] = useState(100);
+  const [view, setView] = useState<'hotels' | 'cities'>(() => load('view', 'hotels'));
+  const [citySort, setCitySort] = useState<CitySort>(() => load('citySort', 'name'));
+  const [openCity, setOpenCity] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('data/hotels.json')
@@ -71,6 +78,8 @@ export default function App() {
 
   useEffect(() => save('settings', settings), [settings]);
   useEffect(() => save('manualPrices', manual), [manual]);
+  useEffect(() => save('view', view), [view]);
+  useEffect(() => save('citySort', citySort), [citySort]);
 
   const today = new Date().toISOString().slice(0, 10);
   const checkins = useMemo(() => {
@@ -86,6 +95,13 @@ export default function App() {
     [data, checkin, prices, manual, settings],
   );
   const rows = useMemo(() => rank(applyFilters(priced, filters)), [priced, filters]);
+  const groups = useMemo(() => (view === 'cities' ? groupByCity(rows, citySort) : []), [view, rows, citySort]);
+  // Drilling into a city narrows the map to that city's hotels.
+  const cityRows = useMemo(
+    () => (view === 'cities' && openCity ? rows.filter((r) => cityKeyOf(r.hotel) === openCity) : null),
+    [view, openCity, rows],
+  );
+  const mapRows = cityRows && cityRows.length ? cityRows : rows;
   const selected = rows.find((r) => r.hotel.id === selectedId) ?? priced.find((r) => r.hotel.id === selectedId) ?? null;
 
   // Time-lapse: step through check-in dates.
@@ -111,10 +127,11 @@ export default function App() {
       select: rows.filter((r) => r.hotel.selectBrand).length,
       free: p.filter((r) => r.net === 0).length,
       cheapest: p[0]?.net ?? null,
+      cities: new Set(rows.map((r) => cityKeyOf(r.hotel))).size,
     };
   }, [rows]);
 
-  const fitKey = JSON.stringify(filters);
+  const fitKey = JSON.stringify(filters) + (cityRows && cityRows.length ? `|${openCity}` : '');
   const set = <K extends keyof Filters>(k: K, v: Filters[K]) => {
     setFilters((f) => ({ ...f, [k]: v }));
     setLimit(100);
@@ -201,20 +218,55 @@ export default function App() {
       )}
 
       <main className="body">
-        <section className="list" aria-label="Ranked hotels">
+        <section className="list" aria-label={view === 'cities' ? 'Cities by continent' : 'Ranked hotels'}>
+          <div className="listhead">
+          <div className="viewbar">
+            <div className="tabs" role="tablist" aria-label="List view">
+              <button role="tab" aria-selected={view === 'hotels'} className={view === 'hotels' ? 'on' : ''} onClick={() => setView('hotels')}>
+                Hotels
+              </button>
+              <button role="tab" aria-selected={view === 'cities'} className={view === 'cities' ? 'on' : ''} onClick={() => setView('cities')}>
+                Cities by continent
+              </button>
+            </div>
+            {view === 'cities' && (
+              <select value={citySort} onChange={(e) => setCitySort(e.target.value as CitySort)} aria-label="Sort cities">
+                <option value="name">A–Z</option>
+                <option value="hotels">Most hotels</option>
+                <option value="cheapest">Cheapest</option>
+              </select>
+            )}
+          </div>
           <div className="stats">
+            {view === 'cities' && <span><b>{stats.cities.toLocaleString()}</b> cities</span>}
             <span><b>{stats.count.toLocaleString()}</b> hotels</span>
             <span><b>{stats.priced.toLocaleString()}</b> priced</span>
             <span><b>{stats.select}</b> with both credits</span>
             {stats.free > 0 && <span className="good"><b>{stats.free}</b> free after credits</span>}
             {stats.cheapest != null && <span>cheapest net <b>{usd(stats.cheapest)}</b></span>}
           </div>
-          <ol>
-            {rows.slice(0, limit).map((r, i) => (
-              <Row key={r.hotel.id} r={r} rank={i + 1} home={data.homeAirport} active={r.hotel.id === selectedId} onClick={() => setSelectedId(r.hotel.id)} />
-            ))}
-          </ol>
-          {rows.length > limit && (
+          </div>
+          {view === 'cities' ? (
+            <CityList
+              groups={groups}
+              home={data.homeAirport}
+              openCity={openCity}
+              selectedId={selectedId}
+              onToggleCity={(k) => setOpenCity((c) => (c === k ? null : k))}
+              onSelect={(id) => {
+                setSelectedId(id);
+                // On phones the map (and the hotel card) sits above the list.
+                if (window.matchMedia('(max-width: 820px)').matches) document.querySelector('.mapwrap')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
+          ) : (
+            <ol>
+              {rows.slice(0, limit).map((r, i) => (
+                <Row key={r.hotel.id} r={r} rank={i + 1} home={data.homeAirport} active={r.hotel.id === selectedId} onClick={() => setSelectedId(r.hotel.id)} />
+              ))}
+            </ol>
+          )}
+          {view === 'hotels' && rows.length > limit && (
             <button className="more" onClick={() => setLimit((l) => l + 200)}>
               Show more ({(rows.length - limit).toLocaleString()} left)
             </button>
@@ -223,7 +275,7 @@ export default function App() {
         </section>
 
         <section className="mapwrap">
-          <MapView rows={rows} selectedId={selectedId} onSelect={setSelectedId} showHeat={showHeat} showPins={showPins} fitKey={fitKey} />
+          <MapView rows={mapRows} selectedId={selectedId} onSelect={setSelectedId} showHeat={showHeat} showPins={showPins} fitKey={fitKey} />
           <div className="maptools">
             <label><input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} /> Heatmap</label>
             <label><input type="checkbox" checked={showPins} onChange={(e) => setShowPins(e.target.checked)} /> Pins</label>
@@ -283,6 +335,78 @@ function Badges({ h, home }: { h: Hotel; home: string }) {
         <span className="badge ua" title={`United serves ${h.united.code} (${h.united.km} km)`}>✈ United {h.united.code}</span>
       ) : null}
     </span>
+  );
+}
+
+function CityList(props: {
+  groups: ContinentGroup[];
+  home: string;
+  openCity: string | null;
+  selectedId: string | null;
+  onToggleCity(key: string): void;
+  onSelect(id: string): void;
+}) {
+  const { groups, home, openCity, selectedId, onToggleCity, onSelect } = props;
+  const many = groups.reduce((n, g) => n + g.cities, 0) > 150;
+  return (
+    <div className="cities">
+      {groups.map((g) => (
+        <details key={g.continent} className="continent" open={!many || g.countries.some((c) => c.cities.some((ci) => ci.key === openCity))}>
+          <summary>
+            <span className="cname">{g.continent}</span>
+            <span className="ccount">
+              {g.cities} {g.cities === 1 ? 'city' : 'cities'} · {g.hotels} {g.hotels === 1 ? 'hotel' : 'hotels'}
+            </span>
+          </summary>
+          {g.countries.map((c) => (
+            <div key={c.country} className="country">
+              <h4>
+                {c.name} <span>{c.cities.length}</span>
+              </h4>
+              <ul>
+                {c.cities.map((ci) => {
+                  const open = ci.key === openCity;
+                  return (
+                    <li key={ci.key} className={open ? 'city open' : 'city'}>
+                      <button className="cityrow" aria-expanded={open} onClick={() => onToggleCity(ci.key)}>
+                        <span className="caret" aria-hidden>{open ? '▾' : '▸'}</span>
+                        <span className="cinfo">
+                          <span className="ctitle">
+                            {ci.city}
+                            {ci.state && <span className="cstate">, {ci.state}</span>}
+                          </span>
+                          <span className="badges">
+                            {ci.selectCount > 0 && <span className="badge sel">{ci.selectCount} both credits</span>}
+                            {ci.nearHome ? (
+                              <span className="badge home">Near {home}</span>
+                            ) : ci.nonstop ? (
+                              <span className="badge ns">✈ {home}–{ci.nonstop}</span>
+                            ) : null}
+                          </span>
+                        </span>
+                        <span className="cright">
+                          <span className="chotels">{ci.rows.length} {ci.rows.length === 1 ? 'hotel' : 'hotels'}</span>
+                          {ci.cheapest != null && (
+                            <span className="cfrom" style={{ color: priceColor(ci.cheapest) }}>from {usd(ci.cheapest)}</span>
+                          )}
+                        </span>
+                      </button>
+                      {open && (
+                        <ol className="cityhotels">
+                          {ci.rows.map((r, i) => (
+                            <Row key={r.hotel.id} r={r} rank={i + 1} home={home} active={r.hotel.id === selectedId} onClick={() => onSelect(r.hotel.id)} />
+                          ))}
+                        </ol>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </details>
+      ))}
+    </div>
   );
 }
 
