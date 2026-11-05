@@ -39,8 +39,11 @@ jobs:
       - name: Rebuild hotels with fresh United route data
         run: REFRESH_ROUTES=1 node scripts/build_hotels.mjs
       - name: Refresh price estimates
-        run: node scripts/fetch_prices.mjs
+        # LiteAPI when its key is set (preferred), otherwise Xotelo.
+        run: |
+          if [ -n "$LITEAPI_KEY" ]; then node scripts/fetch_prices_liteapi.mjs; else node scripts/fetch_prices.mjs; fi
         env:
+          LITEAPI_KEY: ${{ secrets.LITEAPI_KEY }}
           MAX_CALLS: ${{ github.event.inputs.max_calls || '8000' }}
           PROBE: ${{ github.event.inputs.probe == 'true' && '1' || '' }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
@@ -49,7 +52,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/data data/tripadvisor_keys.json data/rapidapi_usage.json 2>/dev/null || git add public/data data/tripadvisor_keys.json
+          git add public/data data/*.json
           git diff --cached --quiet || git commit -m "Refresh hotel and price data"
           git push
 

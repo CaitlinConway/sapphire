@@ -4,18 +4,23 @@ on:
   pull_request:
     paths:
       - 'scripts/fetch_prices.mjs'
+      - 'scripts/fetch_prices_liteapi.mjs'
       - '.github/workflows/probe-prices.yml'
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      LITEAPI_KEY: ${{ secrets.LITEAPI_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Search and price one hotel
+      # Xotelo probe runs without the RapidAPI key so it doesn't spend monthly searches.
+      - name: Xotelo rates and heatmap
         run: PROBE=1 MAX_CALLS=10 node scripts/fetch_prices.mjs
-        env:
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      - name: Match and price one hotel on LiteAPI
+        if: env.LITEAPI_KEY != ''
+        run: PROBE=1 node scripts/fetch_prices_liteapi.mjs

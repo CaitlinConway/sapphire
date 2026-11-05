@@ -260,7 +260,7 @@ export default function App() {
         </section>
       </main>
       <footer>
-        Prices are public estimates (Xotelo/TripAdvisor) and may differ from the Chase Travel prepaid rate; always confirm on Chase Travel.
+        Prices are public estimates (LiteAPI or Xotelo) and may differ from the Chase Travel prepaid rate; always confirm on Chase Travel.
         The Edit credit is up to $250 per prepaid 2+ night booking (max $500/yr). Select-brand credit list built by name matching.
         {prices?.updated && <> Prices updated {new Date(prices.updated).toLocaleDateString()}.</>} Hotel list built {new Date(data.built).toLocaleDateString()}.
       </footer>
