@@ -20,7 +20,8 @@ jobs:
         env:
           # No RapidAPI key here, so the probe never spends monthly searches.
           TRIPADVISOR_KEY: ${{ secrets.TRIPADVISOR_KEY }}
-      - name: Wikidata TripAdvisor-id coverage
-        run: node scripts/wikidata_probe.mjs
       - name: Xotelo CORS check
-        run: curl -s -D - -o /dev/null -H "Origin: https://caitlinconway.github.io" "https://data.xotelo.com/api/rates?hotel_key=g35805-d9807749&chk_in=2026-11-19&chk_out=2026-11-21" | grep -i -E "^HTTP|access-control" || true
+        run: |
+          curl -s -D - -o /dev/null -H "Origin: https://caitlinconway.github.io" "https://data.xotelo.com/api/rates?hotel_key=g35805-d9807749&chk_in=2026-11-19&chk_out=2026-11-21" | grep -i -E "^HTTP|access-control" || true
+      - name: Web search for TripAdvisor links
+        run: node scripts/search_probe.mjs
