@@ -10,6 +10,10 @@ on:
       max_calls:
         description: 'Max Xotelo API calls this run'
         default: '3000'
+      probe:
+        description: 'Only test the price API with one hotel and print the responses'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -37,7 +41,9 @@ jobs:
         run: node scripts/fetch_prices.mjs
         env:
           MAX_CALLS: ${{ github.event.inputs.max_calls || '3000' }}
+          PROBE: ${{ github.event.inputs.probe == 'true' && '1' || '' }}
       - name: Commit data
+        if: github.event.inputs.probe != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -47,7 +53,7 @@ jobs:
 
   deploy:
     needs: refresh
-    if: always() && (needs.refresh.result == 'success' || needs.refresh.result == 'skipped')
+    if: always() && github.event.inputs.probe != 'true' && (needs.refresh.result == 'success' || needs.refresh.result == 'skipped')
     runs-on: ubuntu-latest
     environment:
       name: github-pages
