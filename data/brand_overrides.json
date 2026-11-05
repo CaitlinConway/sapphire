@@ -1,0 +1,4 @@
+{
+  "_comment": "Map hotel id to a select-brand group (e.g. \"IHG\") or null to override name matching.",
+  "overrides": {}
+}
