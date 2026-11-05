@@ -123,6 +123,13 @@ if (process.env.PROBE) {
     const r = await api('rates', { hotel_key: k.hotel_key, chk_in: checkins[2], chk_out: iso(addDays(new Date(checkins[2]), NIGHTS)) });
     console.log('rates', JSON.stringify(r)?.slice(0, 800));
   }
+  // Endpoints that don't need a search: a known key from Xotelo's docs, and Chicago's location key.
+  const r2 = await api('rates', { hotel_key: 'g297930-d305178', chk_in: checkins[2], chk_out: iso(addDays(new Date(checkins[2]), NIGHTS)) });
+  console.log('rates(known key)', JSON.stringify(r2)?.slice(0, 600));
+  const l = await api('list', { location_key: 'g35805', limit: '5' });
+  console.log('list(Chicago)', JSON.stringify(l)?.slice(0, 600));
+  const hm = await api('heatmap', { hotel_key: 'g297930-d305178', chk_out: iso(addDays(new Date(checkins[2]), NIGHTS)) });
+  console.log('heatmap(known key)', JSON.stringify(hm)?.slice(0, 400));
   console.log('failures', failureSamples);
   process.exit(0);
 }
