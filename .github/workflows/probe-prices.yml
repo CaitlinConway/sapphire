@@ -20,3 +20,5 @@ jobs:
         env:
           # No RapidAPI key here, so the probe never spends monthly searches.
           TRIPADVISOR_KEY: ${{ secrets.TRIPADVISOR_KEY }}
+      - name: Wikidata TripAdvisor-id coverage
+        run: node scripts/wikidata_probe.mjs
