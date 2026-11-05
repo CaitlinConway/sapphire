@@ -48,7 +48,8 @@ jobs:
           PROBE: ${{ github.event.inputs.probe == 'true' && '1' || '' }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       - name: Commit data
-        if: github.event.inputs.probe != 'true'
+        # Always commit, so the RapidAPI usage counter survives a failed run.
+        if: always() && github.event.inputs.probe != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
