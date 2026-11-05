@@ -48,7 +48,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/data data/tripadvisor_keys.json
+          git add public/data data/tripadvisor_keys.json data/rapidapi_usage.json 2>/dev/null || git add public/data data/tripadvisor_keys.json
           git diff --cached --quiet || git commit -m "Refresh hotel and price data"
           git push
 

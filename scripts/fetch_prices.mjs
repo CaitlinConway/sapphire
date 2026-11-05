@@ -16,7 +16,10 @@ const MAX_CALLS = +(process.env.MAX_CALLS ?? 3000);
 const DELAY_MS = +(process.env.DELAY_MS ?? 700);
 const WEEKS = +(process.env.WEEKS ?? 12);
 const NIGHTS = +(process.env.NIGHTS ?? 2);
-const RETRY_DAYS = +(process.env.RETRY_UNMATCHED_DAYS ?? 14);
+const RETRY_DAYS = +(process.env.RETRY_UNMATCHED_DAYS ?? 60);
+// RapidAPI's free Xotelo plan is a hard 1,000 requests/month. Stay under it, tracked in data/rapidapi_usage.json.
+const SEARCH_MONTHLY_LIMIT = +(process.env.SEARCH_MONTHLY_LIMIT ?? 950);
+const USAGE_FILE = 'data/rapidapi_usage.json';
 const KEYS_FILE = 'data/tripadvisor_keys.json';
 const PRICES_FILE = 'public/data/prices.json';
 
@@ -156,14 +159,27 @@ const retryBefore = iso(addDays(new Date(today), -RETRY_DAYS));
 let saved = 0;
 try {
   // 1. Match hotels to TripAdvisor keys (new hotels, and unmatched ones every RETRY_DAYS).
+  const month = today.slice(0, 7);
+  const usage = readJson(USAGE_FILE, { month, searches: 0 });
+  if (usage.month !== month) Object.assign(usage, { month, searches: 0 });
+  const searchesLeft = Math.max(0, SEARCH_MONTHLY_LIMIT - usage.searches);
+  // Priority: hotels with both credits, then United nonstop from home, then the rest.
+  const prio = (h) => (h.selectBrand ? 0 : h.homeNonstop || h.nearHome ? 1 : 2);
   const toMatch = RAPIDAPI_KEY
-    ? hotels.filter((h) => !keys[h.id] || (!keys[h.id].key && keys[h.id].checked < retryBefore))
+    ? hotels
+        .filter((h) => !keys[h.id] || (!keys[h.id].key && keys[h.id].checked < retryBefore))
+        .sort((a, b) => prio(a) - prio(b))
+        .slice(0, searchesLeft)
     : [];
+  if (RAPIDAPI_KEY) console.log(`RapidAPI searches used in ${month}: ${usage.searches}/${SEARCH_MONTHLY_LIMIT}`);
   if (!RAPIDAPI_KEY) console.log('No RAPIDAPI_KEY: skipping hotel matching; only hotels with known TripAdvisor keys get prices.');
   console.log(`Matching ${toMatch.length} hotels to TripAdvisor…`);
   for (const h of toMatch) {
-    let m = bestMatch(h, collectKeys(await api('search', { query: h.name })));
-    if (!m && h.city) m = bestMatch(h, collectKeys(await api('search', { query: `${h.name} ${h.city}` })));
+    // One search per hotel to conserve the monthly quota.
+    const before = calls;
+    const m = bestMatch(h, collectKeys(await api('search', { query: h.name })));
+    usage.searches += calls - before;
+    fs.writeFileSync(USAGE_FILE, JSON.stringify(usage, null, 1));
     keys[h.id] = { key: m?.hotel_key ?? null, checked: today };
     if (calls - saved >= 200) { save(); saved = calls; }
   }
