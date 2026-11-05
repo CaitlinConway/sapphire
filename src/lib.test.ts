@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Hotel, PricesFile, applyFilters, creditsFor, defaultCheckins, priceHotel, rank } from './lib';
+import { Hotel, PricesFile, applyFilters, cleanCity, continentOf, creditsFor, defaultCheckins, groupByCity, priceHotel, rank } from './lib';
 
 const base: Hotel = {
   id: '1', name: 'Kimpton Gray Hotel by IHG', address: '', city: 'Chicago', state: 'IL', country: 'US', postal: '',
@@ -47,5 +47,33 @@ describe('pricing', () => {
   it('default check-ins are Thursdays and Sundays', () => {
     const d = defaultCheckins('2026-11-05', 1);
     expect(d).toEqual(['2026-11-08', '2026-11-12']);
+  });
+});
+
+describe('cities by continent', () => {
+  it('maps countries to continents', () => {
+    expect(continentOf('US')).toBe('North America');
+    expect(continentOf('PR')).toBe('Caribbean & Central America');
+    expect(continentOf('JP')).toBe('Asia');
+    expect(continentOf('ZZ')).toBe('Other');
+  });
+  it('cleans messy Chase city names', () => {
+    expect(cleanCity('Roma')).toBe('Rome');
+    expect(cleanCity('Dublin 2')).toBe('Dublin');
+    expect(cleanCity('Taormina (ME)')).toBe('Taormina');
+    expect(cleanCity('Ubud, Bali')).toBe('Ubud');
+    expect(cleanCity('Washington D.C.')).toBe('Washington');
+    expect(cleanCity('seoul')).toBe('Seoul');
+  });
+  it('groups filtered rows into continent > country > city', () => {
+    const rows = [base, plain, { ...plain, id: '3', city: 'London ', selectBrand: 'IHG' }].map((h) => priceHotel(h, null, prices, {}, on));
+    const g = groupByCity(rows);
+    expect(g.map((c) => c.continent)).toEqual(['North America', 'Europe']);
+    const london = g[1].countries[0].cities[0];
+    expect(london.city).toBe('London');
+    expect(london.rows).toHaveLength(2);
+    expect(london.selectCount).toBe(1);
+    expect(london.nonstop).toBe('LHR');
+    expect(g[0].countries[0].cities[0].nearHome).toBe(true);
   });
 });
