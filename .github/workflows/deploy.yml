@@ -20,8 +20,9 @@ permissions:
   pages: write
   id-token: write
 
+# Code pushes deploy right away instead of queueing behind a long price refresh.
 concurrency:
-  group: refresh-and-deploy
+  group: ${{ github.event_name == 'push' && 'deploy-push' || 'refresh' }}
   cancel-in-progress: false
 
 jobs:
