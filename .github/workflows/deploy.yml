@@ -9,7 +9,7 @@ on:
     inputs:
       max_calls:
         description: 'Max Xotelo API calls this run'
-        default: '3000'
+        default: '8000'
       probe:
         description: 'Only test the price API with one hotel and print the responses'
         type: boolean
@@ -28,7 +28,7 @@ jobs:
   refresh:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,7 +40,7 @@ jobs:
       - name: Refresh price estimates
         run: node scripts/fetch_prices.mjs
         env:
-          MAX_CALLS: ${{ github.event.inputs.max_calls || '3000' }}
+          MAX_CALLS: ${{ github.event.inputs.max_calls || '8000' }}
           PROBE: ${{ github.event.inputs.probe == 'true' && '1' || '' }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       - name: Commit data

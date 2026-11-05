@@ -12,7 +12,7 @@ const API = 'https://data.xotelo.com/api';
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || 'xotelo-hotel-prices.p.rapidapi.com';
 const RAPID_ONLY = new Set(['search']);
-const MAX_CALLS = +(process.env.MAX_CALLS ?? 3000);
+const MAX_CALLS = +(process.env.MAX_CALLS ?? 8000);
 const DELAY_MS = +(process.env.DELAY_MS ?? 700);
 const WEEKS = +(process.env.WEEKS ?? 12);
 const NIGHTS = +(process.env.NIGHTS ?? 2);
@@ -184,26 +184,36 @@ try {
     if (calls - saved >= 200) { save(); saved = calls; }
   }
 
-  // 2. Rates, stalest hotel first.
-  const queue = hotels
-    .filter((h) => keys[h.id]?.key)
-    .sort((a, b) => (prices.fetched[a.id] ?? '').localeCompare(prices.fetched[b.id] ?? ''));
-  console.log(`Fetching rates for up to ${queue.length} hotels × ${checkins.length} dates…`);
-  for (const h of queue) {
+  // 2. Rates. Breadth first: hotels with no prices yet get a quick pass (heatmap + the next
+  //    QUICK_DATES check-ins) so the whole map fills fast; then the stalest hotels get every date.
+  const QUICK_DATES = +(process.env.QUICK_DATES ?? 4);
+  async function fetchHotel(h, dates) {
     const key = keys[h.id].key;
     const totals = (prices.totals[h.id] ??= {});
-    for (const ci of checkins) {
+    const hm = await api('heatmap', { hotel_key: key, chk_out: iso(addDays(new Date(checkins[0]), NIGHTS)) });
+    const m = hm?.heatmap ?? hm;
+    if (m) prices.heat[h.id] = { cheap: m.cheap_price_days ?? [], high: m.high_price_days ?? [] };
+    for (const ci of dates) {
       const co = iso(addDays(new Date(ci), NIGHTS));
       const r = await api('rates', { hotel_key: key, chk_in: ci, chk_out: co, currency: 'USD' });
       const rates = (r?.rates ?? []).map((x) => (+x.rate || 0) + (+x.tax || 0)).filter((x) => x > 0);
       if (rates.length) totals[ci] = Math.round(Math.min(...rates) * NIGHTS);
       else delete totals[ci];
     }
-    const hm = await api('heatmap', { hotel_key: key, chk_out: iso(addDays(new Date(checkins[0]), NIGHTS)) });
-    const m = hm?.heatmap ?? hm;
-    if (m) prices.heat[h.id] = { cheap: m.cheap_price_days ?? [], high: m.high_price_days ?? [] };
-    prices.fetched[h.id] = today;
     if (calls - saved >= 200) { save(); saved = calls; }
+  }
+  const withKey = hotels.filter((h) => keys[h.id]?.key);
+  const fresh = withKey.filter((h) => !prices.fetched[h.id]);
+  console.log(`Quick pass: ${fresh.length} new hotels × ${QUICK_DATES} dates…`);
+  for (const h of fresh) {
+    await fetchHotel(h, checkins.slice(0, QUICK_DATES));
+    prices.fetched[h.id] = '0000-quick';
+  }
+  const queue = withKey.sort((a, b) => (prices.fetched[a.id] ?? '').localeCompare(prices.fetched[b.id] ?? ''));
+  console.log(`Full pass: up to ${queue.length} hotels × ${checkins.length} dates…`);
+  for (const h of queue) {
+    await fetchHotel(h, checkins);
+    prices.fetched[h.id] = today;
   }
 } catch (e) {
   if (e.message !== 'budget') throw e;
