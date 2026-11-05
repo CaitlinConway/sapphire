@@ -19,6 +19,8 @@ A web app for finding cheap 2-night stays at Chase Sapphire Reserve **The Edit**
 
 Prices are **estimates**. Chase Travel's prepaid rate can differ, so confirm on Chase before booking.
 
+Xotelo needs each hotel's TripAdvisor key, and its own hotel search no longer works. Keys are listed by hand in `data/tripadvisor_overrides.json` (hotel id → TripAdvisor URL or `g123-d456` key). It starts with the 98 hotels that get both credits and have a United nonstop from ORD. To price another hotel, add its TripAdvisor link there.
+
 ## Run locally
 
 ```bash

@@ -43,10 +43,8 @@ jobs:
         env:
           MAX_CALLS: ${{ github.event.inputs.max_calls || '8000' }}
           PROBE: ${{ github.event.inputs.probe == 'true' && '1' || '' }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-          TRIPADVISOR_KEY: ${{ secrets.TRIPADVISOR_KEY }}
       - name: Commit data
-        # Always commit, so the RapidAPI usage counter survives a failed run.
+        # Always commit, so prices fetched before a failure are kept.
         if: always() && github.event.inputs.probe != 'true'
         run: |
           git config user.name "github-actions[bot]"
