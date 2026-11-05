@@ -20,6 +20,55 @@ const RETRY_DAYS = +(process.env.RETRY_UNMATCHED_DAYS ?? 60);
 // RapidAPI's free Xotelo plan is a hard 1,000 requests/month. Stay under it, tracked in data/rapidapi_usage.json.
 const SEARCH_MONTHLY_LIMIT = +(process.env.SEARCH_MONTHLY_LIMIT ?? 950);
 const USAGE_FILE = 'data/rapidapi_usage.json';
+// TripAdvisor Content API (free 5,000 calls/month): finds each hotel's TripAdvisor id by coordinates.
+const TA_KEY = process.env.TRIPADVISOR_KEY || '';
+const TA_MONTHLY_LIMIT = +(process.env.TA_MONTHLY_LIMIT ?? 4500);
+const TA_REFERER = process.env.TRIPADVISOR_REFERER || 'https://caitlinconway.github.io/sapphire/';
+const TA_USAGE_FILE = 'data/tripadvisor_usage.json';
+const TA_BASE = 'https://api.content.tripadvisor.com/api/v1';
+
+let taCalls = 0;
+async function ta(path, params) {
+  taCalls++;
+  const url = `${TA_BASE}${path}?${new URLSearchParams({ key: TA_KEY, language: 'en', ...params })}`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let status = 0, text = '';
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json', Referer: TA_REFERER } });
+      status = res.status;
+      text = await res.text();
+      await sleep(150);
+      if (status === 429 || status >= 500) { await sleep(3000 * (attempt + 1)); continue; }
+      if (!res.ok) throw new Error(`HTTP ${status}`);
+      return JSON.parse(text);
+    } catch (e) {
+      if (attempt === 2 || (status >= 400 && status < 500 && status !== 429)) {
+        failures++;
+        if (failureSamples.length < 5) failureSamples.push(`tripadvisor ${path} ${status} ${e.message} :: ${text.slice(0, 200)}`);
+        return null;
+      }
+      await sleep(1500 * (attempt + 1));
+    }
+  }
+  return null;
+}
+
+/** TripAdvisor id for one hotel: nearby name search, then details for the g…-d… key in web_url. */
+async function taMatch(h) {
+  const s = await ta('/location/search', { searchQuery: h.name.slice(0, 80), category: 'hotels', latLong: `${h.lat},${h.lng}` });
+  if (!s) return undefined; // API failure: leave for a later run
+  let best = null, score = 0;
+  for (const c of s.data ?? []) {
+    let sc = similarity(h.name, c.name ?? '');
+    const city = `${c.address_obj?.city ?? ''} ${c.address_obj?.address_string ?? ''}`.toLowerCase();
+    if (h.city && city.includes(h.city.toLowerCase())) sc += 0.2;
+    if (sc > score) { score = sc; best = c; }
+  }
+  if (!best || score < 0.6) return null;
+  const d = await ta(`/location/${best.location_id}/details`, { currency: 'USD' });
+  const m = String(d?.web_url ?? '').match(/g\d+-d\d+/);
+  return m ? m[0] : null;
+}
 const KEYS_FILE = 'data/tripadvisor_keys.json';
 const PRICES_FILE = 'public/data/prices.json';
 
@@ -134,6 +183,17 @@ function save() {
   fs.writeFileSync(PRICES_FILE, JSON.stringify(prices));
 }
 
+if (process.env.PROBE && TA_KEY) {
+  const h = hotels.find((x) => /Kimpton Gray/.test(x.name)) ?? hotels[0];
+  const k = await taMatch(h);
+  console.log('tripadvisor match', h.name, '->', k, `(${taCalls} calls)`);
+  if (k) {
+    const r = await api('rates', { hotel_key: k, chk_in: checkins[2], chk_out: iso(addDays(new Date(checkins[2]), NIGHTS)) });
+    console.log('xotelo rates', JSON.stringify(r)?.slice(0, 500));
+  }
+  console.log('failures', failureSamples);
+  process.exit(0);
+}
 if (process.env.PROBE) {
   const h = hotels.find((x) => /Kimpton Gray/.test(x.name)) ?? hotels[0];
   // Query variants, to learn what the search endpoint accepts (4 searches max).
@@ -167,6 +227,23 @@ let saved = 0;
 try {
   // 1. Match hotels to TripAdvisor keys (new hotels, and unmatched ones every RETRY_DAYS).
   const month = today.slice(0, 7);
+  if (TA_KEY) {
+    const taUsage = readJson(TA_USAGE_FILE, { month, calls: 0 });
+    if (taUsage.month !== month) Object.assign(taUsage, { month, calls: 0 });
+    const pending = hotels.filter((h) => !keys[h.id] || (!keys[h.id].key && keys[h.id].checked < retryBefore) || keys[h.id].checked === '1970-01-01');
+    console.log(`TripAdvisor Content API: ${taUsage.calls}/${TA_MONTHLY_LIMIT} calls used in ${month}; ${pending.length} hotels to match.`);
+    let misses = 0, n = 0;
+    for (const h of pending) {
+      if (taUsage.calls + taCalls + 2 > TA_MONTHLY_LIMIT) { console.log('TripAdvisor monthly budget reached.'); break; }
+      const k = await taMatch(h);
+      if (k === undefined) { if (++misses >= 15) { console.log('15 TripAdvisor failures in a row; stopping.'); break; } continue; }
+      misses = 0;
+      keys[h.id] = { key: k, checked: today, via: 'tripadvisor' };
+      if (++n % 100 === 0) { save(); console.log(`  matched ${n} (${taCalls} TripAdvisor calls)`); }
+    }
+    taUsage.calls += taCalls;
+    fs.writeFileSync(TA_USAGE_FILE, JSON.stringify(taUsage, null, 1));
+  }
   const usage = readJson(USAGE_FILE, { month, searches: 0 });
   if (usage.month !== month) Object.assign(usage, { month, searches: 0 });
   const searchesLeft = Math.max(0, SEARCH_MONTHLY_LIMIT - usage.searches);
