@@ -25,6 +25,10 @@ function candidates(html) {
   for (let i = 0; i < 2; i++) {
     try { text += ' ' + decodeURIComponent(text.replace(/\+/g, ' ')); } catch { /* keep going */ }
   }
+  // Bing wraps result links as bing.com/ck/a?...&u=a1<base64url>.
+  for (const m of html.matchAll(/[?&;]u=a1([A-Za-z0-9_\-]+)/g)) {
+    try { text += ' ' + Buffer.from(m[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch { /* ignore */ }
+  }
   const out = new Map();
   for (const m of text.matchAll(RE)) {
     const key = `g${m[1]}-d${m[2]}`;
@@ -54,6 +58,11 @@ export async function searchEngines(query) {
     const bing = await get(`https://www.bing.com/search?${new URLSearchParams({ q: query, setlang: 'en' })}`);
     c = candidates(bing.html);
     engine = `bing(${bing.status})`;
+  }
+  if (!c.length) {
+    const brave = await get(`https://search.brave.com/search?${new URLSearchParams({ q: query })}`);
+    c = candidates(brave.html);
+    engine += ` brave(${brave.status})`;
   }
   return { engine: `${engine} ddg=${ddg.status}`, candidates: c };
 }
