@@ -8,6 +8,10 @@
 import fs from 'node:fs';
 
 const API = 'https://data.xotelo.com/api';
+// /search is only served through RapidAPI. Set RAPIDAPI_KEY (a repo secret) to use it.
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
+const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || 'xotelo-hotel-prices.p.rapidapi.com';
+const RAPID_ONLY = new Set(['search']);
 const MAX_CALLS = +(process.env.MAX_CALLS ?? 3000);
 const DELAY_MS = +(process.env.DELAY_MS ?? 700);
 const WEEKS = +(process.env.WEEKS ?? 12);
@@ -29,12 +33,20 @@ async function api(path, params) {
   if (calls >= MAX_CALLS) throw new Error('budget');
   calls++;
   if (calls % 100 === 0) console.log(`  … ${calls} calls`);
-  const url = `${API}/${path}?${new URLSearchParams(params)}`;
+  const rapid = RAPID_ONLY.has(path);
+  if (rapid && !RAPIDAPI_KEY) return null;
+  const url = rapid
+    ? `https://${RAPIDAPI_HOST}/api/${path}?${new URLSearchParams(params)}`
+    : `${API}/${path}?${new URLSearchParams(params)}`;
   for (let attempt = 0; attempt < 3; attempt++) {
     let status = 0, text = '';
     try {
       const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (sapphire-edit-finder)', Accept: 'application/json' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (sapphire-edit-finder)',
+          Accept: 'application/json',
+          ...(rapid ? { 'x-rapidapi-key': RAPIDAPI_KEY, 'x-rapidapi-host': RAPIDAPI_HOST } : {}),
+        },
       });
       status = res.status;
       text = await res.text();
@@ -99,6 +111,12 @@ const rawKeys = readJson(KEYS_FILE, {});
 const keys = Object.fromEntries(
   Object.entries(rawKeys).map(([id, v]) => [id, v && typeof v === 'object' ? v : { key: v ?? null, checked: v ? today : '1970-01-01' }]),
 );
+// Manual TripAdvisor matches: hotel id -> TripAdvisor URL or key (g123-d456). Always wins.
+const manualKeys = readJson('data/tripadvisor_overrides.json', { overrides: {} }).overrides ?? {};
+for (const [id, v] of Object.entries(manualKeys)) {
+  const m = String(v).match(/g\d+-d\d+/);
+  if (m) keys[id] = { key: m[0], checked: today, manual: true };
+}
 const prices = readJson(PRICES_FILE, { updated: null, nights: NIGHTS, checkins: [], totals: {}, heat: {}, fetched: {} });
 prices.fetched ??= {};
 const checkins = checkinDates();
@@ -138,7 +156,10 @@ const retryBefore = iso(addDays(new Date(today), -RETRY_DAYS));
 let saved = 0;
 try {
   // 1. Match hotels to TripAdvisor keys (new hotels, and unmatched ones every RETRY_DAYS).
-  const toMatch = hotels.filter((h) => !keys[h.id] || (!keys[h.id].key && keys[h.id].checked < retryBefore));
+  const toMatch = RAPIDAPI_KEY
+    ? hotels.filter((h) => !keys[h.id] || (!keys[h.id].key && keys[h.id].checked < retryBefore))
+    : [];
+  if (!RAPIDAPI_KEY) console.log('No RAPIDAPI_KEY: skipping hotel matching; only hotels with known TripAdvisor keys get prices.');
   console.log(`Matching ${toMatch.length} hotels to TripAdvisor…`);
   for (const h of toMatch) {
     let m = bestMatch(h, collectKeys(await api('search', { query: h.name })));

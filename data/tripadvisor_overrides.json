@@ -1,0 +1,4 @@
+{
+  "_comment": "Hotel id -> TripAdvisor hotel URL (or its g123-d456 key). Use for hotels the automatic match misses.",
+  "overrides": {}
+}

@@ -17,3 +17,5 @@ jobs:
           node-version: 22
       - name: Search and price one hotel
         run: PROBE=1 MAX_CALLS=10 node scripts/fetch_prices.mjs
+        env:
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
